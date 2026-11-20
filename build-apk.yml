@@ -1,0 +1,39 @@
+name: Build RUN WITH FLIGHT APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - run: npm install
+      - run: npx cap add android
+      - name: Landscape, fullscreen, hardware acceleration
+        run: |
+          M=android/app/src/main/AndroidManifest.xml
+          sed -i 's/<activity/<activity android:screenOrientation="sensorLandscape" android:hardwareAccelerated="true"/' $M
+          S=android/app/src/main/res/values/styles.xml
+          sed -i 's#<style name="AppTheme.NoActionBar"[^>]*>#&\n        <item name="android:windowFullscreen">true</item>\n        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>#' $S
+          cat $M | head -30
+      - name: Install game icon
+        run: |
+          R=android/app/src/main/res
+          rm -f $R/mipmap-anydpi-v26/ic_launcher.xml $R/mipmap-anydpi-v26/ic_launcher_round.xml
+          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            cp icons/ic_launcher_$d.png $R/mipmap-$d/ic_launcher.png
+            cp icons/ic_launcher_round_$d.png $R/mipmap-$d/ic_launcher_round.png
+            rm -f $R/mipmap-$d/ic_launcher_foreground.png
+          done
+          sed -i 's#<string name="app_name">[^<]*</string>#<string name="app_name">RUN WITH FLIGHT</string>#; s#<string name="title_activity_main">[^<]*</string>#<string name="title_activity_main">RUN WITH FLIGHT</string>#' $R/values/strings.xml
+      - run: npx cap sync android
+      - run: cd android && chmod +x gradlew && ./gradlew assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RUN-WITH-FLIGHT-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
